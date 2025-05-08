@@ -1,102 +1,36 @@
-const Joi = require("joi");
+require("dotenv").config();
+const startupDebugger = require("debug")("app:startup");
+const dbDebugger = require("debug")("app:db");
+const config = require("config");
+//Builds the server
 const express = require("express");
 const app = express();
-require("dotenv").config();
-app.use(express.json()); //enable parsing of JSON objects in the body of a request
+//Routers
+const courses = require("./routes/courses");
+const home = require("./routes/home");
 
-const courses = [
-  { id: 1, name: "course1" },
-  { id: 2, name: "course2" },
-  { id: 3, name: "course3" },
-];
+//?Template Engines:
+app.set("view engine", "pug");
 
-const schema = validate();
+//? Configuration settings:
+console.log("Application Name: " + config.get("name"));
+console.log("Mial Server: " + config.get("mail.host"));
+console.log("Mail Password: " + config.get("mail.password"));
 
-app.get("/", (request, response) => {
-  //Route handler
-  response.send("Welcome to our website!!!");
+//? Debugger:
+if (app.get("env") === "development") {
+  startupDebugger("Morgan enabled");
+  dbDebugger("Database debugger enabled");
+}
+
+//?Middleware functions: Take a request object and either returns a response to the client or passes the control to another Middleware function
+app.use(express.json()); // Reads the request and parses it body into a JSON object, setting the req.body object
+app.use((req, res, next) => {
+  next(); //Pass control to the next middleware function in the pipeline, preventing the request-response cycle from hanging without termination.
 });
+app.use("/api/courses", courses); // For any routes that start with /api/courses express should use the courses router
+app.use("/", home); //For the route to home, express should use the home router
 
-//GET all
-app.get("/api/courses", (req, res) => {
-  res.send(courses);
-});
-
-//GET one
-app.get("/api/courses/:id", (req, res) => {
-  const course = courses.find(
-    (course) => course.id === parseInt(req.params.id)
-  );
-  if (!course)
-    return res.status(404).send("The course with the given id was not found");
-
-  res.send(course);
-});
-
-//POST
-app.post("/api/courses/", (req, res) => {
-  const { error } = validate(req.body);
-
-  if (error) return res.status(400).send(error.details[0].message);
-
-  //Read the course object in the body of the request and use its properties to create a new course object.
-  const course = {
-    id: courses.length + 1,
-    name: req.body.name, //We assume that in the request body we have an object with the name property
-  };
-  //Add the new course object to the courses array
-  courses.push(course);
-
-  //By convention when adding a new object to the server we return it in the body of the response. The reason for this is because usually the client needs to know the id of the new object
-  res.send(course);
-});
-
-//PUT
-app.put("/api/courses/:id", (req, res) => {
-  //Look up the existing course
-  const course = courses.find(
-    (course) => course.id === parseInt(req.params.id)
-  );
-  //If the course does not exist, return 404 (Resource not found)
-  if (!course)
-    return res.status(404).send("The course with the given id was not found");
-
-  //Validate the course to make sure it is in good shape
-  const { error } = validate(req.body);
-  if (error) return res.status(400).send(error.details[0].message);
-
-  //Update the course and return it
-  course.name = req.body.name;
-  res.send(course);
-});
-
-//DELETE
-app.delete("/api/courses/:id", (req, res) => {
-  // Look up the existing course by id
-  const course = courses.find(
-    (course) => course.id === parseInt(req.params.id)
-  );
-  if (!course)
-    return res.status(404).send("The course with the given id was not found");
-
-  // Remove the course from the array and return it
-  const index = courses.indexOf(course);
-  courses.splice(index, 1);
-  res.send(course);
-});
-
-/* 
-  ? Environment Variables: 
-    When hosting environments for node applications we have the PORT environment variable. An environment variable is a variable that is part of the environment in which
-    a process runs. 
-*/
+//? Environment Variables: When hosting environments for node applications we have the PORT environment variable.
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Listening on port ${port}`));
-
-//? Global functions
-function validate(course) {
-  const schema = Joi.object({
-    name: Joi.string().min(3).required(),
-  });
-  return schema.validate(course);
-}
